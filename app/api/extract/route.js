@@ -21,7 +21,7 @@ export async function POST(req) {
   }
 
   const { pdf_text_content } = body;
-
+  console.log(pdf_text_content)
   if (!pdf_text_content) {
     return NextResponse.json(
       { error: "pdf_text_content is required" },
@@ -29,50 +29,130 @@ export async function POST(req) {
     );
   }
 
-  const prompt = `Here is raw text extracted from a PDF resume. Please extract the resume information and return it as XML, following this structure. Pay close attention to the following rules:
-1. For experience, organization, and education entries, if the end date indicates 'NOW' or 'PRESENT', include a <stillhere>true</stillhere> tag.
-2. Format all <start> and <end> dates to DD/MM/YYYY. If the day is not present, default it to 01. For example, 'Aug 2023' should become '01/08/2023'.
-3. Extract only the numerical digits for the <phone> tag. Other fields should be extracted as is.
+const prompt = `You are a CV/resume parser. Extract information from the raw PDF text below and return it as XML following the EXACT structure specified. Do not add any explanation or markdown — return only the raw XML.
 
-XML structure:
-<xml>
-<profile>
-<name>...</name>
-<phone>...</phone>
-<email>...</email>
-</profile>
-<workexperience>
-<experience>
-<company>...</company>
-<start>...</start>
-<end>...</end>
-<stillhere>true</stillhere> (if applicable)
-<title>...</title>
-<description>...</description>
-</experience>
-</workexperience>
-<education>
-<entry>
-<institution>...</institution>
-<start>...</start>
-<end>...</end>
-<stillhere>true</stillhere> (if applicable)
-<degree>...</degree>
-<gpa>...</gpa>
-</entry>
-</education>
-<organizationexperience>
-<entry>
-<organization>...</organization>
-<start>...</start>
-<end>...</end>
-<stillhere>true</stillhere> (if applicable)
-<title>...</title>
-<description>...</description>
-</entry>
-</organizationexperience>
-...
-</xml>
+Rules:
+1. Root tag is <cv>, not <xml> or anything else.
+2. If a person is currently working/studying/active in a role, set <current>Y</current>. Otherwise omit the tag or set it to N.
+3. Format all <start> and <end> dates as YYYY-MM-DD. If only month+year is known, default day to 01 (e.g. "Aug 2023" → "2023-08-01"). If only year is known, use "YYYY-01-01".
+4. <phone>: digits only, no spaces or symbols.
+5. If a field is unknown or not present in the resume, leave the tag empty or omit it entirely.
+6. For <skill> level use one of: beginner, intermediate, advanced, expert.
+7. For <skill> category use one of: technical, soft, language, tool, other.
+8. For <language> proficiency use one of: native, fluent, advanced, conversational, basic.
+9. For <achievement> level use one of: internasional, nasional, regional, lokal.
+10. For <experience> employment_status use one of: tetap, kontrak, freelance, magang, paruh_waktu.
+
+Required XML structure:
+
+<cv>
+  <title>{Full Name}'s CV</title>
+
+  <personal_info>
+    <full_name>...</full_name>
+    <headline>...</headline>
+    <email>...</email>
+    <phone>...</phone>
+    <location>...</location>
+    <linkedin_url>...</linkedin_url>
+    <portfolio_url>...</portfolio_url>
+    <objective>...</objective>
+  </personal_info>
+
+  <experiences>
+    <experience>
+      <company_name>...</company_name>
+      <position>...</position>
+      <location>...</location>
+      <employment_status>tetap</employment_status>
+      <start>YYYY-MM-DD</start>
+      <end>YYYY-MM-DD</end>
+      <current>Y</current>
+      <description>...</description>
+    </experience>
+  </experiences>
+
+  <educations>
+    <education>
+      <institution>...</institution>
+      <degree>...</degree>
+      <field_of_study>...</field_of_study>
+      <city>...</city>
+      <start>YYYY-MM-DD</start>
+      <end>YYYY-MM-DD</end>
+      <current>Y</current>
+      <gpa>...</gpa>
+      <gpa_max>4.00</gpa_max>
+      <description>...</description>
+    </education>
+  </educations>
+
+  <organizations>
+    <organization>
+      <organization_name>...</organization_name>
+      <position>...</position>
+      <city>...</city>
+      <start>YYYY-MM-DD</start>
+      <end>YYYY-MM-DD</end>
+      <current>Y</current>
+      <description>...</description>
+    </organization>
+  </organizations>
+
+  <projects>
+    <project>
+      <name>...</name>
+      <role>...</role>
+      <url>...</url>
+      <description>...</description>
+    </project>
+  </projects>
+
+  <skills>
+    <skill>
+      <name>...</name>
+      <level>intermediate</level>
+      <category>technical</category>
+    </skill>
+  </skills>
+
+  <certifications>
+    <certification>
+      <name>...</name>
+      <issuer>...</issuer>
+      <issued_at>YYYY-MM-DD</issued_at>
+      <expires_at>YYYY-MM-DD</expires_at>
+      <never_expires>N</never_expires>
+      <certificate_number>...</certificate_number>
+      <credential_url>...</credential_url>
+    </certification>
+  </certifications>
+
+  <languages>
+    <language>
+      <name>...</name>
+      <proficiency>conversational</proficiency>
+    </language>
+  </languages>
+
+  <achievements>
+    <achievement>
+      <name>...</name>
+      <organizer>...</organizer>
+      <level>nasional</level>
+      <year>2023</year>
+      <description>...</description>
+    </achievement>
+  </achievements>
+
+  <hobbies>
+    <hobby>
+      <name>...</name>
+      <since_year>...</since_year>
+    </hobby>
+  </hobbies>
+
+</cv>
 
 Extracted PDF Text:
 
@@ -86,7 +166,7 @@ ${pdf_text_content}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openrouter/auto",
+        model: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning-20260428:free",
         max_tokens: 250000,
         messages: [
           {
