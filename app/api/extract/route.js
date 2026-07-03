@@ -7,9 +7,6 @@ export async function POST(req) {
   const expectedKey = `Bearer ${secret}`;
 
   if (!secret || authHeader !== expectedKey) {
-    console.log("DEBUG received  :", JSON.stringify(authHeader));
-    console.log("DEBUG expected  :", JSON.stringify(expectedKey));
-    console.log("DEBUG env value :", JSON.stringify(process.env.API_SECRET_KEY));
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -20,8 +17,10 @@ export async function POST(req) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { pdf_text_content } = body;
-  console.log(pdf_text_content)
+  // `prompt` = system prompt yang dikirim dari backend JejakKarir (CVsController::extractPdf).
+  // Endpoint ini TIDAK menyimpan/hardcode prompt sendiri — sepenuhnya dikontrol pengirim.
+  const { pdf_text_content, prompt } = body;
+
   if (!pdf_text_content) {
     return NextResponse.json(
       { error: "pdf_text_content is required" },
@@ -29,134 +28,12 @@ export async function POST(req) {
     );
   }
 
-const prompt = `You are a CV/resume parser. Extract information from the raw PDF text below and return it as XML following the EXACT structure specified. Do not add any explanation or markdown — return only the raw XML.
-
-Rules:
-1. Root tag is <cv>, not <xml> or anything else.
-2. If a person is currently working/studying/active in a role, set <current>Y</current>. Otherwise omit the tag or set it to N.
-3. Format all <start> and <end> dates as YYYY-MM-DD. If only month+year is known, default day to 01 (e.g. "Aug 2023" → "2023-08-01"). If only year is known, use "YYYY-01-01".
-4. <phone>: digits only, no spaces or symbols.
-5. If a field is unknown or not present in the resume, leave the tag empty or omit it entirely.
-6. For <skill> level use one of: beginner, intermediate, advanced, expert.
-7. For <skill> category use one of: technical, soft, language, tool, other.
-8. For <language> proficiency use one of: native, fluent, advanced, conversational, basic.
-9. For <achievement> level use one of: internasional, nasional, regional, lokal.
-10. For <experience> employment_status use one of: tetap, kontrak, freelance, magang, paruh_waktu.
-
-Required XML structure:
-
-<cv>
-  <title>{Full Name}'s CV</title>
-
-  <personal_info>
-    <full_name>...</full_name>
-    <headline>...</headline>
-    <email>...</email>
-    <phone>...</phone>
-    <location>...</location>
-    <linkedin_url>...</linkedin_url>
-    <portfolio_url>...</portfolio_url>
-    <objective>...</objective>
-  </personal_info>
-
-  <experiences>
-    <experience>
-      <company_name>...</company_name>
-      <position>...</position>
-      <location>...</location>
-      <employment_status>tetap</employment_status>
-      <start>YYYY-MM-DD</start>
-      <end>YYYY-MM-DD</end>
-      <current>Y</current>
-      <description>...</description>
-    </experience>
-  </experiences>
-
-  <educations>
-    <education>
-      <institution>...</institution>
-      <degree>...</degree>
-      <field_of_study>...</field_of_study>
-      <city>...</city>
-      <start>YYYY-MM-DD</start>
-      <end>YYYY-MM-DD</end>
-      <current>Y</current>
-      <gpa>...</gpa>
-      <gpa_max>4.00</gpa_max>
-      <description>...</description>
-    </education>
-  </educations>
-
-  <organizations>
-    <organization>
-      <organization_name>...</organization_name>
-      <position>...</position>
-      <city>...</city>
-      <start>YYYY-MM-DD</start>
-      <end>YYYY-MM-DD</end>
-      <current>Y</current>
-      <description>...</description>
-    </organization>
-  </organizations>
-
-  <projects>
-    <project>
-      <name>...</name>
-      <role>...</role>
-      <url>...</url>
-      <description>...</description>
-    </project>
-  </projects>
-
-  <skills>
-    <skill>
-      <name>...</name>
-      <level>intermediate</level>
-      <category>technical</category>
-    </skill>
-  </skills>
-
-  <certifications>
-    <certification>
-      <name>...</name>
-      <issuer>...</issuer>
-      <issued_at>YYYY-MM-DD</issued_at>
-      <expires_at>YYYY-MM-DD</expires_at>
-      <never_expires>N</never_expires>
-      <certificate_number>...</certificate_number>
-      <credential_url>...</credential_url>
-    </certification>
-  </certifications>
-
-  <languages>
-    <language>
-      <name>...</name>
-      <proficiency>conversational</proficiency>
-    </language>
-  </languages>
-
-  <achievements>
-    <achievement>
-      <name>...</name>
-      <organizer>...</organizer>
-      <level>nasional</level>
-      <year>2023</year>
-      <description>...</description>
-    </achievement>
-  </achievements>
-
-  <hobbies>
-    <hobby>
-      <name>...</name>
-      <since_year>...</since_year>
-    </hobby>
-  </hobbies>
-
-</cv>
-
-Extracted PDF Text:
-
-${pdf_text_content}`;
+  if (!prompt) {
+    return NextResponse.json(
+      { error: "prompt (system prompt) is required" },
+      { status: 400 }
+    );
+  }
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -170,8 +47,17 @@ ${pdf_text_content}`;
         max_tokens: 250000,
         messages: [
           {
+            role: "system",
+            content: prompt,
+          },
+          {
             role: "user",
-            content: [{ type: "text", text: prompt }],
+            content: [
+              {
+                type: "text",
+                text: pdf_text_content,
+              },
+            ],
           },
         ],
       }),
